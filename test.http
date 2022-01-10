@@ -1,0 +1,1 @@
+curl --header "Authorization: Token 216248e4477495a8f6d0009e4376b1e4ea59fb83" https://owlbot.info/api/v4/dictionary/owl
