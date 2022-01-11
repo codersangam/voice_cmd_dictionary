@@ -1,8 +1,11 @@
+// ignore_for_file: avoid_print
+
 import 'dart:async';
 import 'dart:convert';
-
+import 'package:avatar_glow/avatar_glow.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -20,8 +23,12 @@ class _HomeScreenState extends State<HomeScreen> {
   // Stream for loading the text as soon as it is typed
   StreamController? streamController;
   Stream? _stream;
+  bool _isListening = false;
 
   Timer? _debounce;
+  late stt.SpeechToText _speech;
+  String _text = 'Press the button and start speaking';
+  String _newtext = "cat";
 
   // search function
   searchText() async {
@@ -30,15 +37,48 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     streamController!.add("waiting");
+
     Response response =
         await get(Uri.parse(url + textEditingController.text.trim()),
             // do provide spacing after Token
             headers: {"Authorization": "Token " + token});
 
-    // var data = json.decode(response.body)['definitions'];
-    // // ignore: avoid_print
-    // print(data);
+    var data = json.decode(response.body);
+    print(data);
     streamController!.add(json.decode(response.body));
+  }
+
+  _listen() async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) => print('onStatus: $val'),
+        onError: (val) => print('onError: $val'),
+      );
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(
+          onResult: (val) => setState(() {
+            _text = val.recognizedWords;
+            _newtext = _text;
+            print(_newtext);
+          }),
+        );
+        if (_newtext.isEmpty) {
+          streamController!.add(null);
+          return;
+        }
+        streamController!.add("waiting");
+        Response response = await get(Uri.parse(url + _newtext.trim()),
+            // do provide spacing after Token
+            headers: {"Authorization": "Token " + token});
+        var data = json.decode(response.body);
+        print(data);
+        streamController!.add(json.decode(response.body));
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
   }
 
   @override
@@ -46,6 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     streamController = StreamController();
     _stream = streamController!.stream;
+    _speech = stt.SpeechToText();
   }
 
   @override
@@ -99,6 +140,20 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: AvatarGlow(
+        animate: _isListening,
+        glowColor: Colors.red,
+        endRadius: 75.0,
+        duration: const Duration(milliseconds: 1000),
+        repeatPauseDuration: const Duration(milliseconds: 100),
+        repeat: true,
+        child: FloatingActionButton(
+          backgroundColor: Colors.red,
+          onPressed: _listen,
+          child: Icon(_isListening ? Icons.mic : Icons.mic_none),
+        ),
+      ),
       body: Container(
         margin: const EdgeInsets.all(8),
         child: StreamBuilder(
@@ -119,7 +174,6 @@ class _HomeScreenState extends State<HomeScreen> {
               itemCount: snapshot.data["definitions"].length,
               itemBuilder: (BuildContext context, int index) {
                 var data = snapshot.data["definitions"].length;
-                // ignore: avoid_print
                 print(data);
                 return ListBody(
                   children: [
